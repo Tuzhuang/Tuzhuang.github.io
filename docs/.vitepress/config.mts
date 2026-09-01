@@ -58,6 +58,7 @@ export default defineConfig({
     nav: [
       { text: '关于本博客', link: '/AboutMe.md' },
       { text: '沸点', link: '/pin/' },
+      { text: '知乎', link: '/zhihu/' },
       {
         text: '笔记分类',
         items: [
@@ -74,7 +75,7 @@ export default defineConfig({
     socialLinks: [
       {
         icon: 'github',
-        link: 'https://github.com/qp666'
+        link: 'https://github.com/Tuzhuang'
       }
     ],
     

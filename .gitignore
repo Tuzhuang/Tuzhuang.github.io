@@ -6,3 +6,7 @@ cache
 .cache
 .temp
 *.local
+# 知乎登录 cookie（含登录态，禁止提交）
+.zhihu-cookie
+# 抓取/构建产生的临时日志
+*.log

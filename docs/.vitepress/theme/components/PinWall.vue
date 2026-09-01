@@ -60,6 +60,119 @@ const shouldShowPinAvatar = computed(
   () => props.showPinAvatar && !props.withSidebar,
 );
 
+// ============== 时间轴 ==============
+const activePinId = ref<string>("");
+// 默认收起为悬浮小按钮；hover 或点击时展开完整列表
+const timelineOpen = ref(false);
+let closeTimer: number | undefined;
+function openTimeline() {
+  if (closeTimer) {
+    clearTimeout(closeTimer);
+    closeTimer = undefined;
+  }
+  timelineOpen.value = true;
+}
+// 移出时延迟 0.5s 再收起，避免还没碰到列表就消失
+function scheduleCloseTimeline() {
+  if (closeTimer) clearTimeout(closeTimer);
+  closeTimer = window.setTimeout(() => {
+    timelineOpen.value = false;
+  }, 500);
+}
+function toggleTimeline() {
+  if (timelineOpen.value) {
+    scheduleCloseTimeline();
+  } else {
+    openTimeline();
+  }
+}
+// 取出沸点正文第一句（去话题、去 emoji 头尾空白）作为时间轴展示文本
+function getTimelineText(pin: PinItem): string {
+  const raw = String(pin?.content || "")
+    .replace(/\s+/g, " ")
+    .replace(/#[\u4e00-\u9fa5\w]+/g, "")
+    .trim();
+  if (!raw) return "(无内容)";
+  // 截取前 22 字
+  return raw.length > 22 ? raw.slice(0, 22) + "…" : raw;
+}
+// 时间轴上展示相对时间，例如「刚刚 / 3 小时前 / 昨天 / 11-12」
+function getTimelineTime(pin: PinItem): string {
+  const t = Number(pin?.ctime || 0);
+  if (!t) return "";
+  const now = Date.now();
+  const diff = Math.max(0, Math.floor((now - t * 1000) / 1000));
+  if (diff < 60) return "刚刚";
+  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
+  if (diff < 86400 * 2) return "昨天";
+  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)} 天前`;
+  const d = new Date(t * 1000);
+  return `${d.getMonth() + 1}-${String(d.getDate()).padStart(2, "0")}`;
+}
+// 滚动到指定沸点（带平滑动画 + 视口留白）
+function scrollToPin(msgId: string) {
+  const el = document.getElementById(`pin-${msgId}`);
+  if (!el) return;
+  activePinId.value = msgId;
+  const top = el.getBoundingClientRect().top + window.scrollY - 80; // 留 80px 给顶栏
+  window.scrollTo({ top, behavior: "smooth" });
+}
+// 列表顶部显示「最新更新于 ...」（pins 已按 ctime 倒序，取第一条即可）
+const latestUpdated = computed(() => {
+  const first = (pins || [])[0];
+  if (!first) return "";
+  return getTimelineTime(first);
+});
+// 监听滚动，更新当前激活的时间轴条目
+let scrollRaf = 0;
+function onScroll() {
+  if (scrollRaf) return;
+  scrollRaf = requestAnimationFrame(() => {
+    scrollRaf = 0;
+    const items = document.querySelectorAll<HTMLElement>(".pin-card[id^='pin-']");
+    let bestId = "";
+    for (const el of items) {
+      const rect = el.getBoundingClientRect();
+      // 找距离顶部 80px 以内（保留 sticky 顶栏留白）的最后一张
+      if (rect.top <= 100) bestId = el.id.replace(/^pin-/, "");
+      else break;
+    }
+    if (bestId) activePinId.value = bestId;
+  });
+}
+onMounted(() => {
+  window.addEventListener("scroll", onScroll, { passive: true });
+});
+onBeforeUnmount(() => {
+  window.removeEventListener("scroll", onScroll);
+  if (scrollRaf) cancelAnimationFrame(scrollRaf);
+});
+
+// 组件内部使用的回复视图结构（等价于 CommentReply，接口是提升的，可提前引用）
+type ReplyView = CommentReply;
+
+// 内部统一把一条「静态扁平回复」转成组件使用的 reply_info 形态
+function toReplyView(r: StaticReply): ReplyView {
+  return {
+    reply_id: r.id,
+    reply_info: {
+      reply_id: r.id,
+      reply_content: r.content,
+      reply_pics: r.pics || [],
+      ctime: String(r.ctime ?? ""),
+      digg_count: r.digg || 0,
+      reply_to_reply_id: r.replyToReplyId || "0",
+      reply_to_user_id: r.replyToUserId || "0",
+    },
+    user_info: {
+      user_name: r.user?.name || "",
+      avatar_large: r.user?.avatar || "",
+      company: r.user?.company || "",
+    },
+  };
+}
+
 const { site } = useData();
 const base = computed(() => site.value?.base ?? "/");
 
@@ -67,7 +180,17 @@ const base = computed(() => site.value?.base ?? "/");
 // 这里通过 import 静态导入，避免运行时异步
 import pinData from "../data/pin.json";
 import commentData from "../data/pin-comments.json";
-const pins = (pinData as unknown as PinItem[]).slice(0, props.limit);
+// 按发布时间倒序：最新的沸点展示在最上面（避免依赖原始 JSON 的写入顺序）
+const sortedPins = (pinData as unknown as PinItem[])
+  .slice()
+  .sort((a, b) => {
+    const ta = Number(a?.ctime || 0);
+    const tb = Number(b?.ctime || 0);
+    if (tb !== ta) return tb - ta;
+    // 时间相同时按 msg_id 倒序，保持稳定
+    return String(b?.msg_id || "").localeCompare(String(a?.msg_id || ""));
+  });
+const pins = sortedPins.slice(0, props.limit);
 
 // 评论：优先从构建期预拉取的静态 JSON 读取（绕开浏览器 CORS）
 // 数据形如：{ [msg_id]: [{ id, content, ctime, digg, pics:[], replyCount, replies:[...], user:{...} }, ...] }
@@ -202,6 +325,66 @@ function resolveReplyToName(comment: CommentItem, reply: CommentReply): string {
   return comment.user_info.user_name || "";
 }
 
+// runtime 调掘金 reply/list 补抓回复（用于构建数据不完整的场景）
+async function fetchRepliesAtRuntime(
+  commentId: string,
+  replyCount: number,
+): Promise<ReplyView[]> {
+  if (!replyCount) return [];
+  const pageSize = 50;
+  const pageCount = Math.ceil(replyCount / pageSize);
+  const out: any[] = [];
+  for (let pageNo = 1; pageNo <= pageCount; pageNo++) {
+    const res = await fetch(
+      "https://api.juejin.cn/interact_api/v1/comment/reply/list",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          client_type: 1,
+          comment_id: commentId,
+          page_no: pageNo,
+          page_size: pageSize,
+          item_type: 4,
+        }),
+      },
+    );
+    if (!res.ok) break;
+    const json = await res.json();
+    if (json.err_no !== 0) break;
+    const data = json.data;
+    const list = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.list)
+        ? data.list
+        : [];
+    out.push(...list);
+    if (list.length < pageSize) break;
+  }
+  // 把掘金原始 reply_info 形态统一转成组件使用的 view 形态
+  return out.map((r) => {
+    const ri = r?.reply_info || {};
+    const ui = r?.user_info || {};
+    return {
+      reply_id: ri.reply_id,
+      reply_info: {
+        reply_id: ri.reply_id,
+        reply_content: ri.reply_content || "",
+        reply_pics: Array.isArray(ri.reply_pics) ? ri.reply_pics : [],
+        ctime: String(ri.ctime ?? ""),
+        digg_count: ri.digg_count || 0,
+        reply_to_reply_id: ri.reply_to_reply_id || "0",
+        reply_to_user_id: ri.reply_to_user_id || "0",
+      },
+      user_info: {
+        user_name: ui.user_name || "",
+        avatar_large: ui.avatar_large || "",
+        company: ui.company || "",
+      },
+    };
+  });
+}
+
 async function loadComments(msgId: string) {
   if (comments.value[msgId]) return; // 已加载
   if (commentLoading.value.has(msgId)) return;
@@ -211,38 +394,51 @@ async function loadComments(msgId: string) {
   // 1) 优先用构建期预拉取的静态评论，绕开浏览器 CORS
   const cached = staticComments[msgId];
   if (cached && cached.length) {
-    comments.value[msgId] = cached.map((c) => ({
-      comment_info: {
+    // 找出回复抓取不完整的评论，runtime 补抓（避免构建时网络/限流导致回复缺失）
+    const needFix = cached
+      .map((c, idx) => ({ c, idx }))
+      .filter(({ c }) => (c.replyCount || 0) > (c.replies?.length || 0));
+    // 补抓结果：idx -> ReplyView[]
+    const fixMap = new Map<number, ReplyView[]>();
+    if (needFix.length) {
+      await Promise.all(
+        needFix.map(async ({ c, idx }) => {
+          try {
+            const replies = await fetchRepliesAtRuntime(
+              c.id,
+              c.replyCount || 0,
+            );
+            if (replies.length) fixMap.set(idx, replies);
+          } catch {
+            // 补抓失败就沿用静态数据，不影响主流程
+          }
+        }),
+      );
+    }
+    comments.value[msgId] = cached.map((c, idx) => {
+      // 静态回复 + 补抓回复 合并去重（按 reply_id），补抓的排前面
+      const merged: ReplyView[] = (fixMap.get(idx) || []).slice();
+      for (const r of (c.replies || []).map(toReplyView)) {
+        if (!merged.some((x) => x.reply_id === r.reply_id)) merged.push(r);
+      }
+      return {
         comment_id: c.id,
-        comment_content: c.content,
-        comment_pics: c.pics || [],
-        ctime: c.ctime,
-        digg_count: c.digg || 0,
-        reply_count: c.replyCount || 0,
-      },
-      user_info: {
-        user_name: c.user?.name || "",
-        avatar_large: c.user?.avatar || "",
-        company: c.user?.company || "",
-      },
-      reply_infos: (c.replies || []).map((r) => ({
-        reply_id: r.id,
-        reply_info: {
-          reply_id: r.id,
-          reply_content: r.content,
-          reply_pics: r.pics || [],
-          ctime: r.ctime,
-          digg_count: r.digg || 0,
-          reply_to_reply_id: r.replyToReplyId || "0",
-          reply_to_user_id: r.replyToUserId || "0",
+        comment_info: {
+          comment_id: c.id,
+          comment_content: c.content,
+          comment_pics: c.pics || [],
+          ctime: String(c.ctime ?? ""),
+          digg_count: c.digg || 0,
+          reply_count: c.replyCount || 0,
         },
         user_info: {
-          user_name: r.user?.name || "",
-          avatar_large: r.user?.avatar || "",
-          company: r.user?.company || "",
+          user_name: c.user?.name || "",
+          avatar_large: c.user?.avatar || "",
+          company: c.user?.company || "",
         },
-      })),
-    }));
+        reply_infos: merged,
+      };
+    });
     commentLoading.value.delete(msgId);
     commentLoading.value = new Set(commentLoading.value);
     return;
@@ -289,6 +485,71 @@ async function toggleComments(msgId: string) {
     expandedComments.value = new Set(expandedComments.value);
     await loadComments(msgId);
   }
+}
+
+// ============= 评论区展开/收起：精确高度过渡 =============
+// 不用 max-height（会按一个远大于实际的行程插值，导致前段空转、后段急停、掉帧），
+// 改为 JS 实测元素真实高度，只过渡实际需要的距离。
+function collapseBeforeEnter(el: Element) {
+  const e = el as HTMLElement;
+  e.style.overflow = "hidden";
+  e.style.height = "0px";
+  e.style.paddingTop = "0px";
+  e.style.marginTop = "0px";
+  e.style.opacity = "0";
+}
+
+function collapseEnter(el: Element) {
+  const e = el as HTMLElement;
+  // 1) 还原到自然状态，测出目标高度（含 padding / border）
+  e.style.height = "auto";
+  e.style.paddingTop = "";
+  e.style.marginTop = "";
+  const target = e.offsetHeight;
+  // 2) 回到折叠起点并强制回流，保证过渡有明确的起始帧
+  e.style.height = "0px";
+  e.style.paddingTop = "0px";
+  e.style.marginTop = "0px";
+  void e.offsetHeight;
+  // 3) 过渡到目标高度
+  e.style.height = `${target}px`;
+  e.style.paddingTop = "";
+  e.style.marginTop = "";
+  e.style.opacity = "1";
+}
+
+function collapseAfterEnter(el: Element) {
+  const e = el as HTMLElement;
+  e.style.height = "";
+  e.style.paddingTop = "";
+  e.style.marginTop = "";
+  e.style.opacity = "";
+  e.style.overflow = "";
+}
+
+function collapseBeforeLeave(el: Element) {
+  const e = el as HTMLElement;
+  // 先把当前自然高度固定下来，作为收起动画的起点
+  e.style.height = `${e.offsetHeight}px`;
+  e.style.overflow = "hidden";
+}
+
+function collapseLeave(el: Element) {
+  const e = el as HTMLElement;
+  void e.offsetHeight; // 强制回流，确保起点生效
+  e.style.height = "0px";
+  e.style.paddingTop = "0px";
+  e.style.marginTop = "0px";
+  e.style.opacity = "0";
+}
+
+function collapseAfterLeave(el: Element) {
+  const e = el as HTMLElement;
+  e.style.height = "";
+  e.style.paddingTop = "";
+  e.style.marginTop = "";
+  e.style.opacity = "";
+  e.style.overflow = "";
 }
 
 // ============= 图片预览弹框 =============
@@ -339,7 +600,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onViewerKey));
             type="button"
             class="avatar-btn"
             :title="`查看 ${pins[0]?.author.user_name || ''} 的头像`"
-            
           >
             <img
               class="avatar"
@@ -400,7 +660,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onViewerKey));
 
     <!-- 沸点流 -->
     <main class="pin-stream">
-      <div v-for="pin in pins" :key="pin.msg_id" class="pin-card">
+      <div
+        v-for="(pin, idx) in pins"
+        :key="pin.msg_id"
+        :id="`pin-${pin.msg_id}`"
+        class="pin-card"
+        :data-pin-index="idx"
+      >
         <!-- 头部：用户名 + 标签（侧栏已有头像时隐藏卡片头像） -->
         <header class="pin-head" :class="{ 'no-avatar': !shouldShowPinAvatar }">
           <img
@@ -410,19 +676,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onViewerKey));
             :alt="pin.author.user_name"
           />
           <div class="pin-meta">
-            <div class="pin-user">
-              <span class="pin-name">{{ pin.author.user_name }}</span>
-              <span class="pin-badge">{{ pin.author.jcode_title }}</span>
-            </div>
-            <div class="pin-sub">
-              <span>{{ pin.author.company }}</span>
-              <span class="dot">·</span>
-              <span>{{ fmtTime(pin.ctime) }}</span>
-              <span v-if="pin.topic_title" class="dot">·</span>
-              <span v-if="pin.topic_title" class="pin-topic-pill"
-                >#{{ pin.topic_title }}</span
-              >
-            </div>
+            <!-- 只展示时间和话题；作者相关信息统一收敛到左侧 sidebar，避免每条重复 -->
+            <span class="pin-time">{{ fmtTime(pin.ctime) }}</span>
+            <span v-if="pin.topic_title" class="pin-topic-pill"
+              >#{{ pin.topic_title }}</span
+            >
           </div>
         </header>
 
@@ -461,7 +719,6 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onViewerKey));
             type="button"
             class="pic-trigger"
             :title="`查看图片 ${idx + 1}/${pin.pic_list.length}`"
-            @click="openViewer(pin.pic_list, idx)"
           >
             <img :src="p" :alt="`图片${idx + 1}`" loading="lazy" />
           </button>
@@ -482,11 +739,19 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onViewerKey));
           <button
             class="action comment"
             :class="{ active: expandedComments.has(pin.msg_id) }"
-            :title="expandedComments.has(pin.msg_id) ? '收起评论' : '展开评论'"
+            :title="
+              expandedComments.has(pin.msg_id)
+                ? '收起评论'
+                : `展开 ${pin.comment_count} 条评论`
+            "
             @click="toggleComments(pin.msg_id)"
           >
             <span class="ico">💬</span>
-            <span class="txt">{{ pin.comment_count }}</span>
+            <span class="txt">
+              {{
+                expandedComments.has(pin.msg_id) ? '收起' : pin.comment_count
+              }}
+            </span>
           </button>
           <button class="action like" title="点赞数">
             <span class="ico">👍</span>
@@ -495,7 +760,15 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onViewerKey));
         </footer>
 
         <!-- 评论区（点击展开后加载） -->
-        <transition name="comment-fade">
+        <transition
+          name="comment-fade"
+          @before-enter="collapseBeforeEnter"
+          @enter="collapseEnter"
+          @after-enter="collapseAfterEnter"
+          @before-leave="collapseBeforeLeave"
+          @leave="collapseLeave"
+          @after-leave="collapseAfterLeave"
+        >
           <div v-if="expandedComments.has(pin.msg_id)" class="pin-comments">
             <div v-if="commentLoading.has(pin.msg_id)" class="comment-loading">
               <span class="loading-dot" /><span class="loading-dot" /><span
@@ -556,7 +829,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onViewerKey));
                     </button>
                   </div>
 
-                  <!-- 评论区对回复：默认全部展开（点击标题可折叠收起） -->
+                  <!-- 评论区对回复：默认折叠，避免视觉冗长；点标题展开全部 -->
                   <template v-if="c.reply_infos && c.reply_infos.length">
                     <div class="comment-replies-header">
                       <button
@@ -567,12 +840,21 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onViewerKey));
                         <span
                           class="arrow"
                           :class="{
-                            open: !collapsedReplies.has(c.comment_id)
+                            open: !collapsedReplies.has(c.comment_id),
                           }"
                           >▸</span
                         >
+                        <span class="replies-label"
+                          >共
+                          {{
+                            c.comment_info.reply_count || c.reply_infos.length
+                          }}
+                          条回复</span
+                        >
                         <span
-                          >共 {{ c.comment_info.reply_count || c.reply_infos.length }} 条回复</span
+                          v-if="collapsedReplies.has(c.comment_id)"
+                          class="replies-hint"
+                          >点击展开</span
                         >
                       </button>
                     </div>
@@ -647,6 +929,50 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onViewerKey));
       </div>
     </main>
 
+    <!-- 右侧时间轴：默认收起为悬浮小按钮，hover/active 时展开成列表 -->
+    <aside
+      v-if="withSidebar && pins.length > 4"
+      class="pin-timeline"
+      :class="{ open: timelineOpen }"
+      @mouseenter="openTimeline"
+      @mouseleave="scheduleCloseTimeline"
+    >
+      <button
+        type="button"
+        class="timeline-toggle"
+        :title="timelineOpen ? '收起时间轴' : `展开时间轴（共 ${pins.length} 条）`"
+        @click="toggleTimeline"
+      >
+        <span class="timeline-icon">⏱</span>
+        <span v-show="timelineOpen" class="timeline-toggle-label">时间轴</span>
+      </button>
+
+      <div v-show="timelineOpen" class="timeline-panel">
+        <div class="timeline-header">
+          <div class="timeline-header-row">
+            <span class="timeline-icon">⏱</span>
+            <span class="timeline-title-text">时间轴</span>
+            <span class="timeline-count">{{ pins.length }}</span>
+          </div>
+          <div class="timeline-updated">最新更新于 {{ latestUpdated }}</div>
+        </div>
+        <ul class="timeline-list">
+          <li
+            v-for="pin in pins"
+            :key="pin.msg_id"
+            class="timeline-item"
+            :class="{ active: activePinId === pin.msg_id }"
+            @click="scrollToPin(pin.msg_id)"
+          >
+            <span class="timeline-dot" />
+            <div class="timeline-body">
+              <div class="timeline-text">{{ getTimelineText(pin) }}</div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </aside>
+
     <!-- 图片预览弹层（点击图片站内放大，不跳转） -->
     <div v-if="viewer.visible" class="pic-viewer" @click.self="closeViewer">
       <button
@@ -704,6 +1030,7 @@ $text-muted-2: var(--vp-c-text-3, #9aa3b2);
   gap: 20px;
   width: 100%;
   margin: 0 auto;
+  // 内容区保持居中合适宽度；时间轴改用 fixed 定位，不参与此容器
   max-width: 1200px;
 
   &.compact {
@@ -717,6 +1044,262 @@ $text-muted-2: var(--vp-c-text-3, #9aa3b2);
     }
   }
 }
+
+/* 右侧时间轴：脱离 flex 文档流，固定到视口右侧，不影响内容区宽度
+   默认状态是一个小圆形按钮，hover/active 时从右侧滑出展开面板 */
+.pin-timeline {
+  // 不参与 flex 布局：宽度 0、不占位
+  flex: 0 0 0;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+
+  // 用 fixed 定位到浏览器最右侧，垂直居中
+  position: fixed;
+  top: 50%;
+  right: 24px;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  z-index: 10;
+
+  // 太窄屏不显示，避免遮挡正文
+  @media screen and (max-width: 1280px) {
+    display: none;
+  }
+}
+
+// 折叠态：小圆按钮
+.timeline-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid $border-soft;
+  border-radius: 50%;
+  color: var(--vp-c-text-2);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: all 0.22s cubic-bezier(0.33, 1, 0.68, 1);
+
+  &:hover {
+    color: $primary;
+    border-color: rgba(30, 128, 255, 0.35);
+    transform: scale(1.05);
+  }
+
+  .timeline-icon {
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  :global(html.dark) & {
+    background: rgba(28, 28, 30, 0.95);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+
+    &:hover {
+      border-color: rgba(77, 195, 255, 0.4);
+    }
+  }
+}
+
+// 展开态：从右侧滑出的面板
+.timeline-panel {
+  position: absolute;
+  top: 50%;
+  right: 48px; // 留出 40px 按钮 + 8px 间距
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  max-height: calc(100vh - 48px);
+  background: var(--vp-c-bg-soft);
+  border: 1px solid $border-soft;
+  border-radius: 12px;
+  padding: 12px 10px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+  animation: timeline-panel-in 0.22s cubic-bezier(0.33, 1, 0.68, 1);
+
+  :global(html.dark) & {
+    background: rgba(28, 28, 30, 0.98);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.5);
+  }
+}
+
+@keyframes timeline-panel-in {
+  from {
+    opacity: 0;
+    transform: translate(8px, -50%);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+}
+
+.timeline-header {
+  padding: 0 4px 10px;
+  border-bottom: 1px solid $border-soft;
+  margin-bottom: 8px;
+}
+
+.timeline-header-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--vp-c-text-1);
+}
+
+.timeline-title-text {
+  flex: 1;
+}
+
+// 列表顶部的更新时间文字（不再逐条重复时间）
+.timeline-updated {
+  font-size: 11px;
+  color: $text-muted;
+  margin-top: 4px;
+  font-weight: 400;
+}
+
+.timeline-icon {
+  font-size: 13px;
+}
+
+.timeline-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: $text-muted;
+  background: rgba(30, 128, 255, 0.1);
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 500;
+
+  :global(html.dark) & {
+    background: rgba(77, 195, 255, 0.18);
+  }
+}
+
+.timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 0 6px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1 1 auto;
+  position: relative;
+  scrollbar-width: thin;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.18);
+    border-radius: 2px;
+  }
+  :global(html.dark) &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  // 中央竖线
+  &::before {
+    content: "";
+    position: absolute;
+    left: 11px;
+    top: 6px;
+    bottom: 6px;
+    width: 1px;
+    background: $border-soft;
+
+    :global(html.dark) & {
+      background: rgba(255, 255, 255, 0.08);
+    }
+  }
+}
+
+.timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 4px 6px 0;
+  cursor: pointer;
+  border-radius: 6px;
+  margin-left: -2px;
+  padding-left: 4px;
+  transition: background 0.18s;
+
+  &:hover {
+    background: rgba(30, 128, 255, 0.05);
+  }
+
+  &.active {
+    background: rgba(30, 128, 255, 0.1);
+
+    .timeline-dot {
+      background: $primary;
+      box-shadow: 0 0 0 3px rgba(30, 128, 255, 0.18);
+    }
+
+    .timeline-text {
+      color: var(--vp-c-text-1);
+      font-weight: 600;
+    }
+  }
+
+  :global(html.dark) & {
+    &.active {
+      background: rgba(77, 195, 255, 0.14);
+
+      .timeline-dot {
+        background: $primary-dark;
+        box-shadow: 0 0 0 3px rgba(77, 195, 255, 0.22);
+      }
+    }
+  }
+}
+
+.timeline-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: $border-soft;
+  position: relative;
+  z-index: 1;
+  transition: all 0.18s;
+
+  :global(html.dark) & {
+    background: rgba(255, 255, 255, 0.25);
+  }
+}
+
+.timeline-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.timeline-text {
+  font-size: 12px;
+  color: var(--vp-c-text-2);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+
 
 /* 侧栏 - 个人卡片 */
 .pin-aside {
@@ -990,67 +1573,28 @@ $text-muted-2: var(--vp-c-text-3, #9aa3b2);
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.pin-head.no-avatar .pin-meta {
-  flex-direction: row;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-
-  .pin-user {
-    margin-bottom: 0;
-  }
-
-  .pin-sub {
-    font-size: 13px;
-  }
-}
-
-.pin-user {
-  display: flex;
   align-items: center;
-  gap: 6px;
-  margin-bottom: 2px;
-}
-
-.pin-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--vp-c-text-1);
-}
-
-.pin-badge {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: linear-gradient(135deg, #1e80ff, #4dc3ff);
-  color: #fff;
-  font-weight: 500;
-}
-
-.pin-sub {
-  display: flex;
+  gap: 10px;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
+}
+
+// 极简头部：时间 + 话题，去掉重复的作者/公司/掘友徽章等冗余
+.pin-time {
   font-size: 12px;
   color: $text-muted;
 }
 
-.dot {
-  color: $text-muted-2;
-  opacity: 0.6;
-}
-
 .pin-topic-pill {
+  font-size: 12px;
   color: $primary;
   font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgba(30, 128, 255, 0.06);
 
   :global(html.dark) & {
     color: $primary-dark;
+    background: rgba(77, 195, 255, 0.1);
   }
 }
 
@@ -1437,24 +1981,25 @@ $text-muted-2: var(--vp-c-text-3, #9aa3b2);
 .comment-replies-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   margin-top: 8px;
-  padding: 0;
-  background: transparent;
-  border: 0;
+  padding: 4px 8px;
+  // background: rgba(30, 128, 255, 0.06);
+  // border: 1px dashed $primary;
   color: $primary;
   font-size: 12px;
   cursor: pointer;
-  border-radius: 4px;
-  transition: opacity 0.18s;
+  border-radius: 12px;
+  transition: all 0.2s ease;
 
   &:hover {
-    opacity: 0.75;
+    background: rgba(30, 128, 255, 0.12);
+    transform: translateX(2px);
   }
 
   .arrow {
     display: inline-block;
-    transition: transform 0.2s ease;
+    transition: transform 0.25s cubic-bezier(0.33, 1, 0.68, 1);
     transform: rotate(0deg);
     font-size: 10px;
 
@@ -1463,14 +2008,26 @@ $text-muted-2: var(--vp-c-text-3, #9aa3b2);
     }
   }
 
-  .meta-tip {
+  .replies-label {
+    font-weight: 600;
+  }
+
+  .replies-hint {
     color: $text-muted;
     font-size: 11px;
+    padding-left: 4px;
+    border-left: 1px solid rgba(30, 128, 255, 0.25);
     margin-left: 2px;
   }
 
   :global(html.dark) & {
+    background: rgba(77, 195, 255, 0.08);
+    border-color: $primary-dark;
     color: $primary-dark;
+
+    .replies-hint {
+      border-color: rgba(77, 195, 255, 0.3);
+    }
   }
 }
 
@@ -1566,14 +2123,34 @@ $text-muted-2: var(--vp-c-text-3, #9aa3b2);
 }
 
 // 评论区展开动画
+// 高度由 JS 实测后写入（见 collapseEnter / collapseLeave），这里只负责过渡曲线。
+// 刻意不用 max-height：它会按一个远大于实际的行程做插值，导致前段空转、后段急停、掉帧。
 .comment-fade-enter-active,
 .comment-fade-leave-active {
-  transition: all 0.25s ease;
+  transition:
+    height 0.3s cubic-bezier(0.33, 1, 0.68, 1),
+    padding-top 0.3s cubic-bezier(0.33, 1, 0.68, 1),
+    margin-top 0.3s cubic-bezier(0.33, 1, 0.68, 1),
+    opacity 0.22s ease;
+  overflow: hidden;
+  will-change: height;
 }
+
+// 收起略快一点，点起来更跟手
+.comment-fade-leave-active {
+  transition-duration: 0.26s, 0.26s, 0.26s, 0.18s;
+}
+
 .comment-fade-enter-from,
 .comment-fade-leave-to {
   opacity: 0;
-  transform: translateY(-4px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comment-fade-enter-active,
+  .comment-fade-leave-active {
+    transition-duration: 0.01ms;
+  }
 }
 
 @media screen and (max-width: 700px) {
