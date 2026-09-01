@@ -35,7 +35,7 @@ const blogTheme = getThemeConfig({
     version: false,
     // message 字段支持配置为HTML内容，配置多条可以配置为数组
     message: '行动力，是对平庸生活最好的回击',
-    // copyright: 'MIT License | 小卿',
+    // copyright: 'MIT License | 张小海',
     // icpRecord: {
     //   name: '蜀ICP备19011724号',
     //   link: 'https://beian.miit.gov.cn/'
@@ -60,7 +60,7 @@ const blogTheme = getThemeConfig({
   themeColor: 'el-blue',
 
   // 文章默认作者
-  author: '小卿',
+  author: '张小海',
 
   hotArticle: {
     title: '🔥 精选文章',

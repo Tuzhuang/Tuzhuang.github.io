@@ -44,3 +44,30 @@
   flex: 1;
   min-width: 0;
 }
+
+/* 极简风格：收紧全站两侧留白 */
+.VPContent {
+  padding: 0 16px;
+}
+
+.VPDoc .container,
+.VPPage .container,
+.VPHome .container {
+  max-width: 1200px;
+}
+
+.VPDoc .content-container {
+  max-width: 100%;
+}
+
+@media (min-width: 960px) {
+  .VPContent {
+    padding: 0 24px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .VPContent {
+    padding: 0 32px;
+  }
+}
