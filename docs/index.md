@@ -2,12 +2,15 @@
 layout: home
 # 首页部分元素定制
 blog:
- name: '张小海的博客'
- motto: 学习永远不会吃亏
+ name: 'HAI.SH'
+ motto: 'Code is poetry.'
  minScreenAvatar: true
  # 轮播文案
  inspiring:
   - 你不必成为太阳，也可以温暖自己的四季
+  - Write code. Make waves.
+  - 人间清醒，代码干净
+  - Stay hungry, stay foolish.
   - 光会迟到，但从不会缺席你的清晨
   - 别人是你路上的风景，你才是自己的方向
   - 不必等风来，你奔跑时自有风声

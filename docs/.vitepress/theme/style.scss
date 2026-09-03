@@ -1,43 +1,332 @@
-.VPHome {
-  // 定义遮罩样式
-  background: radial-gradient(ellipse,
-      rgba(var(--bg-gradient-home), 1) 0%,
-      rgba(var(--bg-gradient-home), 0) 150%);
+/* ============================================================
+ * 首页整体视觉重设计
+ * 关键词：极简、青蓝紫渐变、个人特点、暗色优先
+ * ============================================================ */
 
-  // 自定义首页背景图
-  &::before {
-    // 图片来源：https://zhuanlan.zhihu.com/p/54060187
-    background-image: url(./assets/wallhaven-3l6w73.jpg);
-    background-size: cover;
+/* ---------- 首页背景：纯渐变 + 主题色辉光 ---------- */
+.VPHome {
+  /* 浅色：以极浅蓝灰为底 */
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(54, 207, 201, 0.10), transparent 60%),
+    radial-gradient(900px 500px at 90% 30%, rgba(146, 84, 222, 0.08), transparent 60%),
+    linear-gradient(180deg, #f7f9fc 0%, #eef2f8 100%);
+
+  /* 暗色：以深蓝黑为底，加主题色辉光 */
+  html.dark & {
+    background:
+      radial-gradient(1200px 700px at 50% -10%, rgba(105, 177, 255, 0.10), transparent 60%),
+      radial-gradient(900px 500px at 90% 30%, rgba(179, 127, 235, 0.08), transparent 60%),
+      linear-gradient(180deg, #0d1117 0%, #0a0e15 100%);
+  }
+
+  /* 完全移除背景图，纯渐变背景更清爽 */
+  &::before { display: none; }
+}
+
+/* ============================================================
+ * Hero 区：大标题 + 副标轮播 + 个人简介栏
+ * ============================================================ */
+.header-banner {
+  margin: 32px auto 24px;
+  max-width: 720px;
+
+  h1 {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    line-height: 1.1;
+  }
+
+  /* 大标题：极简英文，发光渐变 */
+  h1 > span.name {
+    font-size: 76px;
+    font-weight: 800;
+    letter-spacing: -1.5px;
+    background: linear-gradient(120deg, #1e80ff 0%, #36cfc9 35%, #9254de 75%, #f759ab 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-fill-color: transparent;
+    position: relative;
+    filter: drop-shadow(0 4px 24px rgba(30, 128, 255, 0.18));
+
+    html.dark & {
+      background: linear-gradient(120deg, #69b1ff 0%, #5cdbd3 35%, #b37feb 75%, #ff85c0 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      filter: drop-shadow(0 4px 32px rgba(105, 177, 255, 0.35));
+    }
+  }
+
+  /* 副标题：等宽字体，terminal 风格 */
+  h1 > span.motto {
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 3px;
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--vp-c-text-2);
+    opacity: 0.85;
+    position: relative;
+    padding-left: 12px;
+
+    &::before { content: ''; }
+
+    /* 终端光标 */
+    &::after {
+      content: '▌';
+      margin-left: 4px;
+      animation: blink 1s steps(2) infinite;
+      color: var(--vp-c-brand-1);
+      opacity: 0.7;
+    }
   }
 }
-// 自定义标题样式
-.header-banner h1 > span.name {
-  font-size: 48px; /* 增大字体 */
-  background: linear-gradient(135deg, rgb(77, 194, 255), rgb(189, 52, 254)); /* 左上到右下渐变 */
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* 轮播文案：等宽、低调 */
+.header-banner .inspiring-wrapper {
+  margin: 22px auto 0;
+  height: 28px;
+
+  h2 {
+    font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 15px;
+    font-weight: 400;
+    letter-spacing: 1.5px;
+    color: var(--vp-c-text-2);
+    cursor: pointer;
+    text-align: center;
+    animation: fade-in 0.5s ease-in-out;
+  }
+}
+
+@keyframes fade-in {
+  0% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+ * 个人简介栏（新增）：Hero 下方一行关键信息
+ * ============================================================ */
+.hero-meta {
+  display: flex;
+  justify-content: center;
+  gap: 32px;
+  margin: 24px auto 0;
+  flex-wrap: wrap;
+  font-size: 13px;
+  color: var(--vp-c-text-2);
+
+  .hero-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+
+    &::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--vp-c-brand-1);
+      box-shadow: 0 0 8px var(--vp-c-brand-1);
+    }
+    strong { color: var(--vp-c-text-1); font-weight: 600; }
+  }
+}
+
+/* ============================================================
+ * Hero CTA 按钮组（样式已移到 HomeExtras.vue scoped）
+ * ============================================================ */
+
+/* ============================================================
+ * 文章列表卡片：统一升级
+ * ============================================================ */
+.blog-list-wrapper ul {
+  display: grid;
+  gap: 16px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.blog-list-wrapper .blog-item,
+  .recommend-container li {
+  position: relative;
+  border-radius: 16px !important;
+  padding: 20px 22px !important;
+  background: var(--vp-c-bg-soft) !important;
+  border: 1px solid var(--vp-c-divider) !important;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04) !important;
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease !important;
+  overflow: hidden;
+
+  /* 左侧渐变条 */
+  &::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: linear-gradient(180deg, #36cfc9, #1e80ff, #9254de);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+
+  html.dark & {
+    background: rgba(22, 27, 34, 0.7) !important;
+    border-color: rgba(255, 255, 255, 0.06) !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3) !important;
+    backdrop-filter: blur(8px);
+  }
+
+  &:hover {
+    transform: translateY(-3px) !important;
+    border-color: var(--vp-c-brand-1) !important;
+    box-shadow: 0 12px 28px rgba(30, 128, 255, 0.15) !important;
+
+    &::before { opacity: 1; }
+
+    .title, .title span {
+      color: var(--vp-c-brand-1) !important;
+    }
+  }
+}
+
+.blog-list-wrapper .blog-item .title,
+  .recommend-container li .title {
+  font-size: 17px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.01em;
+  transition: color 0.25s ease;
+}
+
+.blog-list-wrapper .blog-item .description,
+  .recommend-container li .description {
+  font-size: 13.5px !important;
+  line-height: 1.7 !important;
+  color: var(--vp-c-text-2);
+  margin-top: 8px !important;
+}
+
+.blog-list-wrapper .blog-item .badge-list .split,
+  .recommend-container li .badge-list .split {
+  color: var(--vp-c-text-3);
+}
+
+/* ============================================================
+ * 侧边栏：玻璃感、清晰分区
+ * ============================================================ */
+.blog-info-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.blog-info > div,
+  .blog-info > .card,
+  .blog-home-info .info-widget,
+  .info-container {
+  border-radius: 16px !important;
+  background: var(--vp-c-bg-soft) !important;
+  border: 1px solid var(--vp-c-divider) !important;
+  padding: 18px !important;
+  box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04) !important;
+  transition: transform 0.25s ease, box-shadow 0.25s ease !important;
+
+  html.dark & {
+    background: rgba(22, 27, 34, 0.7) !important;
+    border-color: rgba(255, 255, 255, 0.06) !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3) !important;
+    backdrop-filter: blur(8px);
+  }
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(30, 128, 255, 0.12) !important;
+  }
+}
+
+/* 头像：主题色辉光 */
+.blog-home-header-avatar {
+  display: flex;
+  justify-content: center;
+  margin: 16px auto 8px;
+
+  img {
+    border-radius: 50%;
+    border: 3px solid transparent;
+    background:
+      linear-gradient(var(--vp-c-bg), var(--vp-c-bg)) padding-box,
+      linear-gradient(135deg, #36cfc9, #1e80ff, #9254de) border-box;
+    box-shadow:
+      0 8px 32px rgba(30, 128, 255, 0.25),
+      0 0 0 8px rgba(30, 128, 255, 0.08);
+    transition: transform 0.4s ease, box-shadow 0.4s ease;
+  }
+  &:hover img {
+    transform: rotate(-3deg) scale(1.05);
+    box-shadow:
+      0 12px 40px rgba(30, 128, 255, 0.4),
+      0 0 0 12px rgba(30, 128, 255, 0.12);
+  }
+}
+
+/* 统计数据数字：渐变大 */
+.blog-info .overview-data .overview-item .count {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  background: linear-gradient(135deg, #1e80ff, #9254de);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  text-fill-color: transparent;
 }
 
-.header-banner h1 > span.motto {
-  // color: rgb(106, 5, 201); /* 浅蓝色 */
-  font-size: 16px; /* 增大字体 */
+.blog-info .overview-data .overview-item .label {
+  font-size: 12px !important;
+  letter-spacing: 0.5px;
 }
-/* 精选文章编号：保留圆形排版，去掉默认彩色底色 */
+
+/* 标签词云 */
+.home-tags .tag,
+  .blog-info .tag {
+  border-radius: 999px !important;
+  padding: 4px 12px !important;
+  font-size: 12px !important;
+  transition: all 0.2s ease !important;
+  border: 1px solid var(--vp-c-divider) !important;
+
+  &:hover {
+    background: var(--vp-c-brand-soft) !important;
+    border-color: var(--vp-c-brand-1) !important;
+    color: var(--vp-c-brand-1) !important;
+    transform: translateY(-1px);
+  }
+}
+
+/* ============================================================
+ * 精选文章编号（去掉彩色底色，改为细线条）
+ * ============================================================ */
 .recommend-container li:nth-child(1) .num,
-.recommend-container li:nth-child(2) .num,
-.recommend-container li:nth-child(3) .num {
+  .recommend-container li:nth-child(2) .num,
+  .recommend-container li:nth-child(3) .num {
   background-color: transparent !important;
-  color: var(--description-font-color) !important;
+  color: var(--vp-c-text-3) !important;
   border-radius: 50% !important;
-  font-size: 14px !important;
+  font-size: 13px !important;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', monospace;
   flex: 0 0 24px;
   width: 24px !important;
+  height: 24px;
   margin-right: 10px !important;
   font-style: normal;
   box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--vp-c-divider);
 }
 
 .recommend-container li .des {
@@ -45,14 +334,16 @@
   min-width: 0;
 }
 
-/* 极简风格：收紧全站两侧留白 */
+/* ============================================================
+ * 容器留白与最大宽度
+ * ============================================================ */
 .VPContent {
-  padding: 0 16px;
+  padding: 0 24px;
 }
 
 .VPDoc .container,
-.VPPage .container,
-.VPHome .container {
+  .VPPage .container,
+  .VPHome .container {
   max-width: 1200px;
 }
 
@@ -60,14 +351,22 @@
   max-width: 100%;
 }
 
+/* 首页内边距加大，更有呼吸感 */
+.VPHome {
+  padding: 32px 0 64px;
+}
+
 @media (min-width: 960px) {
-  .VPContent {
-    padding: 0 24px;
-  }
+  .VPContent { padding: 0 32px; }
 }
 
 @media (min-width: 1280px) {
-  .VPContent {
-    padding: 0 32px;
-  }
+  .VPContent { padding: 0 48px; }
+}
+
+/* 小屏 Hero 适配 */
+@media (max-width: 640px) {
+  .header-banner h1 > span.name { font-size: 48px; letter-spacing: -0.5px; }
+  .header-banner h1 > span.motto { font-size: 13px; letter-spacing: 1.5px; }
+  .hero-meta { gap: 16px; font-size: 12px; }
 }

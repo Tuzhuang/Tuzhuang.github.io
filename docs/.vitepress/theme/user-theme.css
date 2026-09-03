@@ -1,26 +1,72 @@
-/* 所有变量：https://github.com/vuejs/vitepress/blob/main/src/client/theme-default/styles/vars.css */
-/* 自定义主题色示例，如下 */
+/* ============================================================
+ * 全站主题色与暗色适配
+ * 个人品牌色：青蓝 #36cfc9 → 蓝 #1e80ff → 紫 #9254de
+ * ============================================================ */
 
-/* 浅色模式使用的变量 */
+/* 浅色模式品牌色 */
 html[theme] {
-  --vp-c-user-1:red;
-  --vp-c-user-2:blue;
-  --vp-c-user-3:green;
-  --vp-c-user-soft:rgba(255,0,0,.5);
+  --vp-c-user-1: #1e80ff;
+  --vp-c-user-2: #36cfc9;
+  --vp-c-user-3: #9254de;
+  --vp-c-user-soft: rgba(30, 128, 255, 0.16);
+  /* 文本 */
+  --vp-c-text-1: #1f2937;
+  --vp-c-text-2: #4b5563;
+  --vp-c-text-3: #9ca3af;
+  /* 背景 */
+  --vp-c-bg: #ffffff;
+  --vp-c-bg-soft: #f6f8fb;
+  --vp-c-bg-mute: #eef2f7;
+  --vp-c-divider: rgba(15, 23, 42, 0.08);
 }
 
-/* 深色模式使用的变量 */
+/* 暗色模式品牌色 + 更深的背景色 */
 html[theme].dark {
-  --vp-c-user-1:yellow;
-  --vp-c-user-2:purple;
-  --vp-c-user-3:orange;
-  --vp-c-user-soft:rgba(255,255,0,.5);
+  --vp-c-user-1: #69b1ff;
+  --vp-c-user-2: #5cdbd3;
+  --vp-c-user-3: #b37feb;
+  --vp-c-user-soft: rgba(105, 177, 255, 0.22);
+  --vp-c-text-1: #e6edf3;
+  --vp-c-text-2: #adbac7;
+  --vp-c-text-3: #6e7681;
+  --vp-c-bg: #0d1117;
+  --vp-c-bg-soft: rgba(22, 27, 34, 0.7);
+  --vp-c-bg-mute: #161b22;
+  --vp-c-divider: rgba(255, 255, 255, 0.08);
 }
 
-/* 覆盖默认变量 */
-html[theme],html[theme].dark {
+html[theme], html[theme].dark {
   --vp-c-brand-1: var(--vp-c-user-1);
   --vp-c-brand-2: var(--vp-c-user-2);
   --vp-c-brand-3: var(--vp-c-user-3);
   --vp-c-brand-soft: var(--vp-c-user-soft);
+}
+
+/* ============================================================
+ * 滚动条：纤细、主题色
+ * ============================================================ */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(30, 128, 255, 0.25);
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(30, 128, 255, 0.5); }
+html.dark ::-webkit-scrollbar-thumb { background: rgba(105, 177, 255, 0.3); }
+html.dark ::-webkit-scrollbar-thumb:hover { background: rgba(105, 177, 255, 0.55); }
+
+/* ============================================================
+ * 文字选区：主题色高亮
+ * ============================================================ */
+::selection {
+  background: var(--vp-c-user-soft);
+  color: var(--vp-c-brand-1);
+}
+
+/* ============================================================
+ * 首页布局：上下整体留白加大
+ * ============================================================ */
+.VPHome {
+  padding-top: 16px;
 }

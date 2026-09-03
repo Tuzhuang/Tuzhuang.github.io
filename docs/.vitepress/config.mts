@@ -21,8 +21,8 @@ export default defineConfig({
   // 文章中的示例地址（如 localhost）不是站内链接，不参与构建死链检查
   ignoreDeadLinks: true,
   lang: 'zh-cn',
-  title: "Perry Blog",
-  description: "A Personal Knowledge Base",
+  title: "HAI.SH",
+  description: "Code is poetry. — 张小海的技术随笔",
   lastUpdated: true,
   // 详见：https://vitepress.dev/zh/reference/site-config#head
   head: [
@@ -58,7 +58,7 @@ export default defineConfig({
     nav: [
       { text: '关于本博客', link: '/AboutMe.md' },
       { text: '沸点', link: '/pin/' },
-      { text: '知乎', link: '/zhihu/' },
+      // { text: '知乎', link: '/zhihu/' },
       {
         text: '笔记分类',
         items: [
