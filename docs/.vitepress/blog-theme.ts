@@ -141,8 +141,28 @@ const blogTheme = getThemeConfig({
   //   ],
   //   duration: 0
   // },
-  // 关闭外部 Live2D 模型，避免网络资源加载失败时一直显示“正在加载”
-  oml2d: false,
+  // Live2D 看板娘（左下角）
+  // 说明：你截图里那只紫发戴帽的特定模型不在 oml2d 官方仓库里，
+  // 这里先用 PIO（白色小天使）作为占位，左下角显示
+  // 若你有那只模型的具体 URL/JSON 路径，替换 path 即可
+  oml2d: {
+    models: [
+      {
+        path: 'https://model.oml2d.com/PIO/model.json',
+        position: [-10, 30], // 左下角
+        scale: 0.4,
+        stageStyle: {
+          height: 300
+        }
+      }
+    ],
+    // 提示气泡文案
+    tips: {
+      welcome: '欢迎来到张小海的博客',
+      hover: '诶...鼠标放错地方了！',
+      transition: '哦呀，文章已经加载好了呢~'
+    }
+  },
 })
 
 export { blogTheme }
